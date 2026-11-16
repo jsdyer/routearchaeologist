@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#17201c">
-  <meta name="description" content="Look up a public ASN, IP address or CIDR prefix and explore historical BGP origin and visibility observations from RIPE RIS.">
+  <meta name="description" content="Explore public BGP route history, announced prefixes, observed AS paths and current RPKI authorization using RIPE RIS data.">
   <title>Route Archaeologist · CoolCode</title>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.mjs"></script>
@@ -17,7 +17,7 @@
     <div class="hero-copy">
       <p class="mono eyebrow">CANADIAN NETWORK RESEARCH</p>
       <h1>Route<br class="title-break"> Archaeologist</h1>
-      <p class="intro">Explore how the public routing record for an address changed. Compare BGP origins, visibility, and periods outside the collectors’ view.</p>
+      <p class="intro">Explore how the public routing record changed. Inspect historical origins and follow the AS paths that collectors observed for an address.</p>
     </div>
     <aside class="examples" aria-labelledby="example-title">
       <h2 id="example-title">Canadian starting points</h2>
@@ -35,7 +35,7 @@
         <label class="resource">ASN, IP, or CIDR prefix<input id="resource" type="search" placeholder="AS852 or 23.17.0.0/16" required maxlength="64" spellcheck="false" autocomplete="off"></label>
         <label>From (UTC)<input id="start" type="date" required></label>
         <label>Through (UTC)<input id="end" type="date" required></label>
-        <button id="submit" type="submit" class="primary">Look up</button>
+        <button id="submit" type="submit" class="primary">Look up history</button>
       </div>
       <div class="quick">
         <span>Set dates</span>
@@ -46,14 +46,27 @@
       </div>
       <details class="options">
         <summary>Collector coverage options</summary>
-        <p>Include a route only when the observation reached this number of RIPE RIS full-feed peers. Lower values can include very localized announcements.</p>
+        <p>This minimum applies to routing history and ASN prefix lists. A path snapshot shows the peers that reported a returned path.</p>
         <label>At least <select id="peers"><option value="10">10 peers</option><option value="5">5 peers</option><option value="1">1 peer</option><option value="50">50 peers</option></select></label>
       </details>
+      <div class="snapshot-controls">
+        <div><h3>Inspect BGP paths</h3><p class="note" id="snapshot-hint">An IP or prefix can use the latest snapshot or a day at 00:00 UTC. An ASN lists its latest observed prefixes.</p></div>
+        <label class="prefix-choice">Snapshot date (optional)<input id="snapshot-date" type="date" aria-describedby="snapshot-hint"></label>
+        <button id="inspect" type="button" class="secondary">Inspect BGP snapshot</button>
+      </div>
     </form>
     <p class="privacy">Lookups send the public network identifier and dates directly to RIPEstat.</p>
     <p id="status" role="status" aria-live="polite">Enter an address, prefix, or ASN above to get started.</p>
     <div class="recovery" id="recovery" hidden><a id="raw-link" href="https://stat.ripe.net/" target="_blank" rel="noopener">Open exact RIPEstat JSON ↗</a></div>
     <div class="import"><label class="quiet" for="import-file">Open saved RIPEstat JSON</label><input id="import-file" class="sr-only" type="file" accept=".json,application/json"></div>
+  </section>
+  <section id="snapshot" class="panel" aria-labelledby="snapshot-title" hidden>
+    <div class="section-head results-head">
+      <div><p class="mono eyebrow">BGP SNAPSHOT</p><h2 id="snapshot-title" tabindex="-1"></h2></div>
+      <div class="result-actions"><button type="button" id="snapshot-back" class="secondary" hidden></button><a id="snapshot-source" class="quiet" href="https://stat.ripe.net/" target="_blank" rel="noopener">Open exact RIPEstat JSON ↗</a></div>
+    </div>
+    <p id="snapshot-status" role="status" aria-live="polite"></p>
+    <div id="snapshot-content" hidden></div>
   </section>
   <section id="results" aria-labelledby="results-title" hidden>
     <div class="section-head results-head">
@@ -62,7 +75,7 @@
     </div>
     <div id="stats" class="stats"></div>
     <div class="panel prefix-panel">
-      <div class="section-head prefix-head"><h3>Prefix timeline</h3><label class="prefix-choice">Choose a prefix<select id="prefix"></select></label></div>
+      <div class="section-head prefix-head"><h3>Prefix timeline</h3><label class="prefix-choice">Choose a prefix<select id="prefix"></select></label><button type="button" id="inspect-prefix" class="secondary">Inspect latest paths</button></div>
       <p id="prefix-summary" class="note"></p>
       <figure class="graph">
         <canvas id="chart" aria-describedby="chart-caption"></canvas>
@@ -82,7 +95,7 @@
     <div class="method-grid">
       <article><h3>What collectors saw</h3><p>RIPEstat groups observed announcements by prefix and origin ASN. Visibility is the share of RIS full-feed peers that saw the origin at that time. Overlapping origins can appear in the same period.</p></article>
       <article><h3>What a gap means</h3><p>A gap can reflect collector coverage or the minimum peer setting. Use traceroutes for packet geography and treat route visibility as a sample of the global BGP system.</p></article>
-      <article><h3>Follow the source</h3><p>Source: <a href="https://stat.ripe.net/docs/data-api/api-endpoints/routing-history.html">RIPEstat Routing History</a> and <a href="https://ris.ripe.net/">RIPE RIS</a>. Use is subject to the <a href="https://www.ripe.net/about-us/legal/ripestat-service-terms-and-conditions/">RIPEstat terms</a>.</p></article>
+      <article><h3>Follow the source</h3><p><a href="https://ris.ripe.net/">RIPE RIS</a> publishes <a href="https://stat.ripe.net/docs/data-api/api-endpoints/routing-history.html">Routing History</a>, <a href="https://stat.ripe.net/docs/data-api/api-endpoints/bgp-state.html">BGP State</a>, and <a href="https://stat.ripe.net/docs/data-api/api-endpoints/announced-prefixes.html">Announced Prefixes</a>. RPKI Guard checks whether the origin and prefix pair is authorized today. Use is subject to the <a href="https://www.ripe.net/about-us/legal/ripestat-service-terms-and-conditions/">RIPEstat terms</a>.</p></article>
     </div>
   </section>
   <noscript><p class="panel">Enable JavaScript to explore timelines, or open <a href="https://stat.ripe.net/">RIPEstat</a> directly.</p></noscript>

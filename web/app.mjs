@@ -1,4 +1,4 @@
-import { apiURL, csvRows, dateOf, DAY, overlapAcrossOrigins, resourceOf, ROW_LIMIT, unpack, validDate } from './data.mjs';
+import { apiURL, csvRows, dateOf, DAY, overlapAcrossOrigins, resourceOf, ROW_LIMIT, rpkiURL, snapshotURL, unpack, unpackAnnouncements, unpackState, validDate } from './data.mjs';
 
 const $ = id => document.getElementById(id);
 const today = dateOf(Date.now());
@@ -97,6 +97,7 @@ function showResults(data, query, selectedPrefix = '') {
 function selectPrefix() {
   rowsLimit = 40;
   const prefix = $('prefix').value;
+  $('inspect-prefix').disabled = !prefix;
   selectedRows = [...(responseData?.byPrefix.get(prefix) ?? [])].sort((a, b) => a.from - b.from || a.origin.localeCompare(b.origin, 'en', { numeric: true }));
   const origins = [...new Set(selectedRows.map(row => row.origin))];
   const label = origins.length === 1 ? '1 origin' : `${count.format(origins.length)} origins`;
@@ -216,18 +217,28 @@ async function lookup(preferredPrefix = '') {
   try {
     let result = cache.get(url.href);
     if (!result) {
-      const response = await fetch(url, { signal: controller.signal, credentials: 'omit' });
+      const options = { signal: controller.signal, credentials: 'omit' };
+      let rawURL = url;
+      let response = await fetch(rawURL, options);
+      const usedFallback = response.status >= 500;
+      if (usedFallback) {
+        rawURL = apiURL(query, false);
+        $('raw-link').href = rawURL.href;
+        response = await fetch(rawURL, options);
+      }
       if (response.status === 429) throw new Error('RIPEstat is rate-limiting requests. Wait a minute and retry.');
       if (!response.ok) throw new Error(`RIPEstat returned HTTP ${response.status}. Try a shorter date range or open the source request.`);
-      result = unpack(await response.json());
+      result = { ...unpack(await response.json()), rawURL, usedFallback };
       cache.set(url.href, result);
       if (cache.size > 8) cache.delete(cache.keys().next().value);
     }
     if (id !== requestId) return;
     $('resource').value = query.resource;
+    $('raw-link').href = result.rawURL.href;
     showResults(result, query, preferredPrefix);
     $('recovery').hidden = false;
-    setStatus(result.rows.length ? `Lookup complete for ${query.resource}.` : `No observed intervals returned for ${query.resource}.`);
+    const message = result.rows.length ? `Lookup complete for ${query.resource}.` : `No observed intervals returned for ${query.resource}.`;
+    setStatus(message + (result.usedFallback ? ' RIPEstat returned peer counts. Visibility percentages are unavailable for this lookup.' : ''));
   } catch (error) {
     if (id !== requestId) return;
     setStatus(error.name === 'AbortError' ? 'The lookup timed out. Try a shorter range or open the source request.'
@@ -268,8 +279,205 @@ async function importReport(event) {
   }
 }
 
+const snapshot = $('snapshot');
+const snapshotTitle = $('snapshot-title');
+const snapshotStatus = $('snapshot-status');
+const snapshotContent = $('snapshot-content');
+const snapshotSource = $('snapshot-source');
+const snapshotBack = $('snapshot-back');
+let snapshotPending;
+
+function routeCheck(asn, prefix) {
+  const link = make('a', 'Check current RPKI ↗');
+  link.href = rpkiURL(asn, prefix);
+  link.target = '_blank';
+  link.rel = 'noopener';
+  return link;
+}
+
+function snapshotTable(label, columns) {
+  const wrap = make('div', undefined, 'table-wrap snapshot-table');
+  wrap.tabIndex = 0;
+  wrap.setAttribute('aria-label', label);
+  const table = make('table');
+  const heading = table.createTHead().insertRow();
+  for (const name of columns) {
+    const cell = make('th', name);
+    cell.scope = 'col';
+    heading.append(cell);
+  }
+  const body = table.createTBody();
+  wrap.append(table);
+  return { wrap, body };
+}
+
+function tableRow(body, ...values) {
+  const row = body.insertRow();
+  for (const value of values) row.insertCell().append(value);
+}
+
+function openSnapshot(resource, url, back) {
+  snapshot.hidden = false;
+  snapshotTitle.textContent = resource;
+  snapshotSource.href = url.href;
+  snapshotBack.hidden = !back;
+  snapshotBack.textContent = back ? `Back to ${back.asn} prefixes` : '';
+  snapshotBack.onclick = back ? back.restore : null;
+  snapshotTitle.focus({ preventScroll: true });
+  snapshot.scrollIntoView({ block: 'start' });
+}
+
+function showPaths({ time, prefixes }) {
+  snapshotStatus.textContent = `Collector snapshot at ${utcTime(time)} UTC.`;
+  const picker = make('select');
+  const field = make('label', 'Observed routing prefix', 'prefix-choice');
+  field.append(picker);
+  const details = make('div');
+  picker.append(...prefixes.map(({ prefix }) => new Option(prefix, prefix)));
+  field.hidden = prefixes.length === 1;
+  function showPrefix(index) {
+    const { prefix, peers, collectors, origins, paths } = prefixes[index];
+    const summary = make('h3', prefix);
+    const totals = make('p', `${count.format(origins.length)} observed origin${origins.length === 1 ? '' : 's'} · ${count.format(peers)} collector-peer sessions · ${count.format(collectors)} RIS collectors`, 'snapshot-totals');
+    const originTable = snapshotTable('Observed origins', ['Origin ASN', 'Collector-peer sessions', 'Authorization']);
+    for (const [origin, seen] of origins) tableRow(originTable.body, origin, count.format(seen), routeCheck(origin, prefix));
+    const pathTable = snapshotTable('Most frequently reported AS paths', ['AS path (peer to origin)', 'Collector-peer sessions']);
+    for (const [path, seen] of paths.slice(0, 12)) tableRow(pathTable.body, path, count.format(seen));
+    const pathNote = make('p', `Showing ${Math.min(12, paths.length)} of ${count.format(paths.length)} distinct AS paths, ranked by the number of collector-peer sessions.`, 'note');
+    details.replaceChildren(summary, totals, originTable.wrap, make('h3', 'Observed AS paths'), pathNote, pathTable.wrap);
+  }
+  if (prefixes.length) {
+    picker.addEventListener('change', () => showPrefix(picker.selectedIndex));
+    showPrefix(0);
+    snapshotContent.replaceChildren(field, details);
+  } else {
+    snapshotContent.replaceChildren(make('p', 'RIPE RIS returned no observed AS paths for this resource at the snapshot time.', 'note'));
+  }
+}
+
+function showAnnouncements(asn, url, { time, prefixes }, peers) {
+  const message = `${count.format(prefixes.length)} prefixes at ${utcTime(time)} UTC · minimum ${peers} full-feed peers.`;
+  snapshotStatus.textContent = message;
+  if (!prefixes.length) {
+    snapshotContent.replaceChildren(make('p', 'No prefixes met this coverage threshold. Try a lower full-feed peer setting.', 'note'));
+    return;
+  }
+  const controls = make('div', undefined, 'snapshot-inventory');
+  const field = make('label', 'Filter by address or prefix', 'prefix-choice');
+  const filter = make('input');
+  filter.type = 'search';
+  filter.spellcheck = false;
+  field.append(filter);
+  const pagination = make('div', undefined, 'quick');
+  const previous = make('button', 'Previous', 'secondary');
+  const next = make('button', 'Next', 'secondary');
+  const matches = make('p', undefined, 'note');
+  matches.setAttribute('aria-live', 'polite');
+  pagination.append(previous, next);
+  controls.append(field, matches, pagination);
+  const { wrap, body } = snapshotTable('Announced prefixes', ['Prefix', 'Collector evidence', 'Authorization']);
+  const inventory = [controls, wrap];
+  const pageSize = 30;
+  let start = 0;
+  const restore = () => {
+    snapshotPending?.abort();
+    snapshotPending = undefined;
+    $('inspect').removeAttribute('aria-busy');
+    openSnapshot(asn, url);
+    snapshotStatus.textContent = message;
+    snapshotStatus.dataset.error = 'false';
+    snapshotContent.replaceChildren(...inventory);
+    snapshotContent.hidden = false;
+  };
+  function render() {
+    const query = filter.value.trim().toLowerCase();
+    const filtered = prefixes.filter(prefix => prefix.includes(query));
+    const end = Math.min(start + pageSize, filtered.length);
+    matches.textContent = filtered.length ? `${count.format(start + 1)}–${count.format(end)} of ${count.format(filtered.length)}` : 'No matching prefixes';
+    previous.disabled = start === 0;
+    next.disabled = end === filtered.length;
+    wrap.hidden = filtered.length === 0;
+    body.replaceChildren();
+    for (const prefix of filtered.slice(start, end)) {
+      const button = make('button', 'Inspect latest paths', 'chip');
+      button.setAttribute('aria-label', `Inspect latest paths for ${prefix}`);
+      button.addEventListener('click', () => lookupSnapshot(prefix, '', { asn, restore }));
+      tableRow(body, prefix, button, routeCheck(asn, prefix));
+    }
+  }
+  filter.addEventListener('input', () => { start = 0; render(); });
+  previous.addEventListener('click', () => { start -= pageSize; render(); });
+  next.addEventListener('click', () => { start += pageSize; render(); });
+  render();
+  snapshotContent.replaceChildren(...inventory);
+}
+
+async function boundedSnapshot(response) {
+  const limit = 16 * 1024 * 1024;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let json = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > limit) {
+      await reader.cancel();
+      throw new Error('This snapshot is too large to inspect in the browser. Try a narrower prefix.');
+    }
+    json += decoder.decode(value, { stream: true });
+  }
+  return JSON.parse(json + decoder.decode());
+}
+
+async function lookupSnapshot(value, day = '', back) {
+  const resource = resourceOf(value);
+  if (!resource) { setStatus('Use an ASN such as AS852, a full IP address, or a CIDR prefix.', true); return; }
+  const asn = resource.startsWith('AS');
+  if (day && (asn || !validDate(day) || day > today)) {
+    setStatus(asn ? 'Clear the snapshot date to see the latest prefix list for an ASN.' : 'Choose a snapshot date ending today or earlier.', true);
+    return;
+  }
+  const peers = $('peers').value;
+  const url = snapshotURL(resource, Date.now(), peers, day);
+  snapshotPending?.abort();
+  const controller = new AbortController();
+  snapshotPending = controller;
+  openSnapshot(resource, url, back);
+  snapshotContent.hidden = true;
+  snapshotStatus.dataset.error = 'false';
+  snapshotStatus.textContent = 'Retrieving collector observations from RIPEstat…';
+  $('inspect').setAttribute('aria-busy', 'true');
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch(url, { signal: controller.signal, credentials: 'omit' });
+    if (response.status === 429) throw new Error('RIPEstat is rate-limiting requests. Wait a minute and retry.');
+    if (!response.ok) throw new Error(`RIPEstat returned HTTP ${response.status}. Try again or open the source response.`);
+    const payload = await boundedSnapshot(response);
+    if (snapshotPending !== controller) return;
+    if (asn) showAnnouncements(resource, url, unpackAnnouncements(payload), peers);
+    else showPaths(unpackState(payload, resource));
+    snapshotContent.hidden = false;
+  } catch (error) {
+    if (snapshotPending !== controller) return;
+    snapshotStatus.dataset.error = 'true';
+    snapshotStatus.textContent = error.name === 'AbortError' ? 'The snapshot timed out. Try a narrower prefix or open the source request.'
+      : error instanceof SyntaxError ? 'RIPEstat returned a response that could not be read.'
+      : error instanceof TypeError ? 'Could not reach RIPEstat from this browser. Try opening the source response.' : error.message;
+  } finally {
+    clearTimeout(timeout);
+    if (snapshotPending === controller) {
+      snapshotPending = undefined;
+      $('inspect').removeAttribute('aria-busy');
+    }
+  }
+}
+
 $('prefix').addEventListener('change', () => { selectPrefix(); rememberPrefix(); });
 $('form').addEventListener('submit', event => { event.preventDefault(); lookup(); });
+$('inspect').addEventListener('click', () => lookupSnapshot($('resource').value, $('snapshot-date').value));
+$('inspect-prefix').addEventListener('click', () => lookupSnapshot($('prefix').value));
 $('import-file').addEventListener('change', importReport);
 $('more').addEventListener('click', () => { rowsLimit += 40; renderIntervals(); });
 $('copy').addEventListener('click', async () => {
@@ -305,6 +513,7 @@ for (const button of document.querySelectorAll('[data-example]')) {
 window.addEventListener('resize', draw);
 $('start').max = today;
 $('end').max = today;
+$('snapshot-date').max = today;
 dates(30);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (hash.has('q')) {

@@ -64,11 +64,11 @@ input::placeholder { color: #62675c; }
 .options select { min-height: 2.25rem; padding: .3rem; }
 .privacy { color: var(--muted); font-size: .85rem; margin-top: .7rem; }
 #status { margin-top: .65rem; font-weight: 680; }
-#status[data-error="true"] { color: #862f25; }
+#status[data-error="true"], #snapshot-status[data-error="true"] { color: #862f25; }
 .recovery, .import { margin-top: .42rem; }
 .import label { text-decoration: underline; text-underline-offset: .17em; }
 .import:focus-within label { outline: 3px solid #c3631e; outline-offset: 2px; }
-#results { margin-top: 2rem; }
+#results, #snapshot { margin-top: 2rem; }
 .results-head { align-items: end; margin-bottom: 1rem; }
 .results-head h2 { margin-top: .18rem; overflow-wrap: anywhere; }
 #result-dates, .note { color: var(--muted); font-size: .89rem; }
@@ -79,6 +79,22 @@ input::placeholder { color: #62675c; }
 .stat span { display: block; font: .74rem/1.4 var(--mono); margin-top: .25rem; }
 .prefix-head { align-items: center; }
 .prefix-choice { width: min(100%, 16rem); }
+.snapshot-controls, .snapshot-inventory { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem 1rem; }
+.snapshot-controls { border-top: 1px solid var(--edge); margin-top: 1rem; padding-top: 1rem; }
+.snapshot-controls > div { flex: 1 1 15rem; }
+.snapshot-controls .prefix-choice { width: min(100%, 12rem); }
+.snapshot-controls input, .snapshot-inventory input { display: block; width: 100%; margin-top: .36rem; }
+.snapshot-controls button { min-height: 2.78rem; }
+#snapshot { scroll-margin-top: 1rem; }
+#snapshot-status { margin-bottom: .7rem; font-weight: 680; }
+#snapshot-content .prefix-choice { display: block; }
+#snapshot-content h3 { margin-top: .75rem; }
+.snapshot-table { margin-block: .65rem 1rem; }
+.snapshot-table table { min-width: 370px; }
+.snapshot-table td { vertical-align: middle; }
+.snapshot-totals { color: var(--muted); font-size: .89rem; margin-top: .28rem; }
+.snapshot-inventory > p { padding-block: .42rem; }
+.snapshot-inventory .quick { margin: 0; }
 #prefix-summary { margin-block: .7rem .5rem; }
 .graph { margin: 0; padding: .5rem; background: #e9eddf; border: 1px solid var(--edge); }
 #chart { display: block; width: 100%; height: 200px; }
