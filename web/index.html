@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17201c">
+  <meta name="description" content="Look up a public ASN, IP address or CIDR prefix and explore historical BGP origin and visibility observations from RIPE RIS.">
+  <title>Route Archaeologist · CoolCode</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#lookup">Skip to lookup</a>
+<header class="mast">
+  <div class="wrap nav"><a href="https://coolcode.ca/" class="brand">Cool<span>Code</span>.ca</a><a href="#method" class="nav-link">Sources & method</a></div>
+  <div class="wrap hero">
+    <div class="hero-copy">
+      <p class="mono eyebrow">CANADIAN NETWORK RESEARCH</p>
+      <h1>Route<br class="title-break"> Archaeologist</h1>
+      <p class="intro">Explore how the public routing record for an address changed. Compare BGP origins, visibility, and periods outside the collectors’ view.</p>
+    </div>
+    <aside class="examples" aria-labelledby="example-title">
+      <h2 id="example-title">Canadian starting points</h2>
+      <button type="button" data-example="AS852"><span>TELUS</span><strong>AS852</strong></button>
+      <button type="button" data-example="AS577"><span>Bell Canada</span><strong>AS577</strong></button>
+      <button type="button" data-example="AS5769"><span>Vidéotron</span><strong>AS5769</strong></button>
+    </aside>
+  </div>
+</header>
+<main class="wrap" id="lookup">
+  <section class="panel lookup-panel" aria-labelledby="query-title">
+    <div class="section-head"><h2 id="query-title">Look up a network</h2><a id="source-request" class="quiet" href="https://stat.ripe.net/" target="_blank" rel="noopener">Open RIPEstat <span aria-hidden="true">↗</span></a></div>
+    <form id="form" role="search">
+      <div class="inputs">
+        <label class="resource">ASN, IP, or CIDR prefix<input id="resource" type="search" placeholder="AS852 or 23.17.0.0/16" required maxlength="64" spellcheck="false" autocomplete="off"></label>
+        <label>From (UTC)<input id="start" type="date" required></label>
+        <label>Through (UTC)<input id="end" type="date" required></label>
+        <button id="submit" type="submit" class="primary">Look up</button>
+      </div>
+      <div class="quick">
+        <span>Set dates</span>
+        <button class="chip" type="button" data-days="30">30 days</button>
+        <button class="chip" type="button" data-days="90">90 days</button>
+        <button class="chip" type="button" data-days="365">1 year</button>
+        <button class="chip" type="button" data-days="1095">3 years</button>
+      </div>
+      <details class="options">
+        <summary>Collector coverage options</summary>
+        <p>Include a route only when the observation reached this number of RIPE RIS full-feed peers. Lower values can include very localized announcements.</p>
+        <label>At least <select id="peers"><option value="10">10 peers</option><option value="5">5 peers</option><option value="1">1 peer</option><option value="50">50 peers</option></select></label>
+      </details>
+    </form>
+    <p class="privacy">Lookups send the public network identifier and dates directly to RIPEstat.</p>
+    <p id="status" role="status" aria-live="polite">Enter an address, prefix, or ASN above to get started.</p>
+    <div class="recovery" id="recovery" hidden><a id="raw-link" href="https://stat.ripe.net/" target="_blank" rel="noopener">Open exact RIPEstat JSON ↗</a></div>
+    <div class="import"><label class="quiet" for="import-file">Open saved RIPEstat JSON</label><input id="import-file" class="sr-only" type="file" accept=".json,application/json"></div>
+  </section>
+  <section id="results" aria-labelledby="results-title" hidden>
+    <div class="section-head results-head">
+      <div><p class="mono eyebrow">ROUTING HISTORY</p><h2 id="results-title"></h2><p id="result-dates"></p></div>
+      <div class="result-actions"><button type="button" id="copy" class="secondary">Copy link</button><button type="button" id="export" class="secondary">Export CSV</button></div>
+    </div>
+    <div id="stats" class="stats"></div>
+    <div class="panel prefix-panel">
+      <div class="section-head prefix-head"><h3>Prefix timeline</h3><label class="prefix-choice">Choose a prefix<select id="prefix"></select></label></div>
+      <p id="prefix-summary" class="note"></p>
+      <figure class="graph">
+        <canvas id="chart" aria-describedby="chart-caption"></canvas>
+        <figcaption id="chart-caption">Bars show the intervals when RIS peers observed an origin. The table below has the exact timestamps and visibility.</figcaption>
+      </figure>
+      <ul id="legend" aria-label="Timeline origins"></ul>
+      <div class="section-head table-head"><h3 id="table-title">Observed intervals</h3><p id="interval-count" class="note"></p></div>
+      <div class="table-wrap" tabindex="0" aria-labelledby="table-title">
+        <table><thead><tr><th scope="col">Origin ASN</th><th scope="col">From (UTC)</th><th scope="col">Through (UTC)</th><th scope="col">Visibility</th><th scope="col">Peers seeing</th></tr></thead><tbody id="intervals"></tbody></table>
+      </div>
+      <button type="button" id="more" class="secondary" hidden>Show more intervals</button>
+    </div>
+    <div id="messages" class="messages" hidden></div>
+  </section>
+  <section id="method" class="method">
+    <h2>Reading the routing record</h2>
+    <div class="method-grid">
+      <article><h3>What collectors saw</h3><p>RIPEstat groups observed announcements by prefix and origin ASN. Visibility is the share of RIS full-feed peers that saw the origin at that time. Overlapping origins can appear in the same period.</p></article>
+      <article><h3>What a gap means</h3><p>A gap can reflect collector coverage or the minimum peer setting. Use traceroutes for packet geography and treat route visibility as a sample of the global BGP system.</p></article>
+      <article><h3>Follow the source</h3><p>Source: <a href="https://stat.ripe.net/docs/data-api/api-endpoints/routing-history.html">RIPEstat Routing History</a> and <a href="https://ris.ripe.net/">RIPE RIS</a>. Use is subject to the <a href="https://www.ripe.net/about-us/legal/ripestat-service-terms-and-conditions/">RIPEstat terms</a>.</p></article>
+    </div>
+  </section>
+  <noscript><p class="panel">Enable JavaScript to explore timelines, or open <a href="https://stat.ripe.net/">RIPEstat</a> directly.</p></noscript>
+</main>
+<footer class="footer"><div class="wrap"><a href="https://coolcode.ca/">CoolCode.ca</a><a href="https://github.com/jsdyer/routearchaeologist">Source code ↗</a></div></footer>
+</body>
+</html>

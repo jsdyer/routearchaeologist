@@ -1,0 +1,5 @@
+/dist/
+__pycache__/
+/.cache/
+*.pyc
+/node_modules/
