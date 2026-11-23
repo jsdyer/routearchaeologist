@@ -1,5 +1,9 @@
 # Route Archaeologist
 
+<!-- coolcode:guide -->
+Enter an IP, prefix or ASN with a UTC date range, select a returned prefix and inspect its observed origins or AS paths. The RPKI link checks current authorization even when the routing observation you selected is historical.
+<!-- /coolcode:guide -->
+
 [CoolCode.ca/routearchaeologist](https://coolcode.ca/routearchaeologist/) is a browser explorer for the BGP history of public IP addresses, CIDR prefixes and ASNs. Start with TELUS AS852, Bell Canada AS577 or Vidéotron AS5769, or enter a network and a UTC date range. Choose among the returned prefixes to inspect its origin timeline. The app compares observed origins and visibility and exports the selected prefix's intervals as CSV.
 
 Use **Inspect BGP snapshot** to see the recorded origins and AS paths for an IP or prefix. Leave the date blank for the latest snapshot, or supply a date to request midnight UTC. For an ASN, use the latest announced-prefix list to filter IPv4 and IPv6 prefixes and open their path snapshots. **Check current RPKI** opens CoolCode’s RPKI Guard with the selected origin and prefix filled in.

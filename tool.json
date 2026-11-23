@@ -1,0 +1,23 @@
+{
+  "id": "routearchaeologist",
+  "title": "Route Archaeologist",
+  "description": "Trace observed BGP origins by IP prefix or ASN.",
+  "category": "liminal-tools",
+  "tags": [
+    "bgp",
+    "asn",
+    "routing",
+    "carrier",
+    "peering",
+    "internet"
+  ],
+  "icon": "route",
+  "url": "/routearchaeologist/",
+  "source": "https://github.com/jsdyer/routearchaeologist",
+  "hosting": "project",
+  "access": "browser",
+  "data_info": {
+    "mode": "live",
+    "detail": "RIPEstat supplies historical route observations for your selected dates."
+  }
+}
